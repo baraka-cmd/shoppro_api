@@ -35,6 +35,9 @@ class UserResource extends JsonResource
                 'address' => $this->profile?->address,
                 'language' => $this->profile?->language ?? 'fr',
                 'currency' => $this->profile?->currency ?? 'FCFA',
+                'newsletter_subscribed' => $this->profile?->newsletter_subscribed ?? true,
+                'sms_notifications' => $this->profile?->sms_notifications ?? true,
+                'push_notifications' => $this->profile?->push_notifications ?? true,
             ],
             
             // Rôles
@@ -55,6 +58,12 @@ class UserResource extends JsonResource
                 'favorites_count' => $this->when(isset($this->favorites_count), $this->favorites_count),
                 'reviews_count' => $this->when(isset($this->reviews_count), $this->reviews_count),
             ],
+            
+            // Statut du compte
+            'is_active' => $this->is_active ?? true,
+            'is_banned' => $this->is_banned ?? false,
+            'is_suspended' => $this->is_suspended ?? false,
+            'is_verified' => $this->email_verified_at !== null,
             
             // Dates
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),

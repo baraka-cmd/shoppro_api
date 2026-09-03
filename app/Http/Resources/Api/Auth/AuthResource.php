@@ -19,6 +19,7 @@ class AuthResource extends JsonResource
             'user' => new UserResource($this['user']),
             'token' => $this['token'] ?? null,
             'token_type' => 'Bearer',
+            'refresh_token' => $this['refresh_token'] ?? null,
             'expires_at' => $this['expires_at'] ?? null,
         ];
     }

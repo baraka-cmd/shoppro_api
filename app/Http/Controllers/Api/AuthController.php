@@ -242,49 +242,55 @@ class AuthController extends Controller
      * @return \Illuminate\Http\JsonResponse
      */
     public function updateProfile(UpdateProfileRequest $request)
-    {
-        try {
-            $user = $request->user();
+{
+    try {
+        $user = $request->user();
 
-            // Mettre à jour les informations de base
-            if ($request->has('name')) {
-                $user->name = $request->name;
-            }
-            if ($request->has('email')) {
-                $user->email = $request->email;
-                $user->email_verified_at = null; // Email à revérifier
-            }
-            $user->save();
-
-            // Mettre à jour le profil détaillé
-            $profileData = $request->validatedProfileData();
-            $profileData = array_filter($profileData, function ($value) {
-                return $value !== null;
-            });
-
-            if ($user->profile) {
-                $user->profile->update($profileData);
-            } else {
-                $user->profile()->create($profileData);
-            }
-
-            // Recharger les relations
-            $user->load('profile', 'roles');
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Profil mis à jour avec succès',
-                'data' => new UserResource($user),
-            ], 200);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Erreur lors de la mise à jour du profil',
-                'error' => $e->getMessage(),
-            ], 500);
+        // Mettre à jour les informations de base
+        if ($request->has('name')) {
+            $user->name = $request->name;
         }
+        $user->save();
+
+        // Mettre à jour le profil détaillé
+        $profileData = $request->validatedProfileData();
+        $profileData = array_filter($profileData, function ($value) {
+            return $value !== null;
+        });
+
+        // ✅ S'assurer que l'adresse est incluse
+        if ($request->has('address')) {
+            $profileData['address'] = $request->address;
+        }
+        if ($request->has('language')) {
+            $profileData['language'] = $request->language;
+        }
+        if ($request->has('currency')) {
+            $profileData['currency'] = $request->currency;
+        }
+
+        if ($user->profile) {
+            $user->profile->update($profileData);
+        } else {
+            $user->profile()->create($profileData);
+        }
+
+        $user->load('profile', 'roles');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Profil mis à jour avec succès',
+            'data' => new UserResource($user),
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la mise à jour du profil',
+            'error' => $e->getMessage(),
+        ], 500);
     }
+}
 
     /**
      * Changer le mot de passe
@@ -421,45 +427,49 @@ class AuthController extends Controller
      * @return \Illuminate\Http\JsonResponse
      */
     public function uploadAvatar(Request $request)
-    {
-        try {
-            $request->validate([
-                'avatar' => 'required|image|mimes:jpeg,png,jpg,webp|max:2048',
-            ]);
+{
+    try {
+        $request->validate([
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,webp|max:2048',
+        ]);
 
-            $user = $request->user();
+        $user = $request->user();
 
-            // Supprimer l'ancien avatar
-            if ($user->profile?->avatar) {
-                Storage::disk('public')->delete($user->profile->avatar);
-            }
-
-            // Uploader le nouveau avatar
-            $path = $request->file('avatar')->store('avatars', 'public');
-
-            // Mettre à jour le profil
-            if ($user->profile) {
-                $user->profile->update(['avatar' => $path]);
-            } else {
-                $user->profile()->create(['avatar' => $path]);
-            }
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Photo de profil mise à jour',
-                'data' => [
-                    'avatar_url' => asset('storage/' . $path),
-                ],
-            ], 200);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Erreur lors de l\'upload de la photo',
-                'error' => $e->getMessage(),
-            ], 500);
+        // Supprimer l'ancien avatar
+        if ($user->profile && $user->profile->avatar) {
+            Storage::disk('public')->delete($user->profile->avatar);
         }
+
+        // Uploader le nouveau avatar
+        $path = $request->file('avatar')->store('avatars', 'public');
+
+        // Mettre à jour le profil
+        if ($user->profile) {
+            $user->profile->update(['avatar' => $path]);
+        } else {
+            $user->profile()->create(['avatar' => $path]);
+        }
+
+        // Recharger avec les relations
+        $user->load('profile', 'roles');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Photo de profil mise à jour',
+            'data' => [
+                'user' => new UserResource($user),
+                'avatar_url' => asset('storage/' . $path),
+            ],
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de l\'upload de la photo',
+            'error' => $e->getMessage(),
+        ], 500);
     }
+}
 
     /**
      * Vérifier la validité du token
