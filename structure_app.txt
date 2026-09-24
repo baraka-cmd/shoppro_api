@@ -1,0 +1,160 @@
+Structure du dossier
+Le num‚ro de s‚rie du volume est 000000BD 12F5:A3F7
+C:\USERS\BARAK\SHOPPRO_API\APP
+ÃÄÄÄHttp
+³   ÃÄÄÄControllers
+³   ³   ³   Controller.php
+³   ³   ³   
+³   ³   ÀÄÄÄApi
+³   ³       ³   AuthController.php
+³   ³       ³   BrandController.php
+³   ³       ³   CategoryController.php
+³   ³       ³   
+³   ³       ÃÄÄÄAbout
+³   ³       ³       AboutController.php
+³   ³       ³       
+³   ³       ÃÄÄÄAdmin
+³   ³       ³       AdminNotificationController.php
+³   ³       ³       AdminOrderController.php
+³   ³       ³       AdminPromotionController.php
+³   ³       ³       AdminReviewController.php
+³   ³       ³       AdminSettingController.php
+³   ³       ³       AdminStockController.php
+³   ³       ³       AdminUserController.php
+³   ³       ³       
+³   ³       ÃÄÄÄBanner
+³   ³       ³       BannerController.php
+³   ³       ³       
+³   ³       ÃÄÄÄDashboard
+³   ³       ³       DashboardController.php
+³   ³       ³       
+³   ³       ÃÄÄÄLegal
+³   ³       ³       LegalDocumentController.php
+³   ³       ³       
+³   ³       ÃÄÄÄProduct
+³   ³       ³       ProductController.php
+³   ³       ³       
+³   ³       ÀÄÄÄSupport
+³   ³               ContactController.php
+³   ³               FaqCategoryController.php
+³   ³               FaqController.php
+³   ³               SupportTicketController.php
+³   ³               TicketMessageController.php
+³   ³               
+³   ÃÄÄÄMiddleware
+³   ³       CheckRole.php
+³   ³       CorsMiddleware.php
+³   ³       
+³   ÃÄÄÄRequests
+³   ³   ÀÄÄÄApi
+³   ³       ÃÄÄÄAuth
+³   ³       ³       ChangePasswordRequest.php
+³   ³       ³       ForgotPasswordRequest.php
+³   ³       ³       LoginRequest.php
+³   ³       ³       RegisterRequest.php
+³   ³       ³       ResetPasswordRequest.php
+³   ³       ³       UpdateProfileRequest.php
+³   ³       ³       
+³   ³       ÀÄÄÄSupport
+³   ³               ContactRequest.php
+³   ³               StoreTicketRequest.php
+³   ³               TicketMessageRequest.php
+³   ³               
+³   ÀÄÄÄResources
+³       ÀÄÄÄApi
+³           ÃÄÄÄAuth
+³           ³       AuthResource.php
+³           ³       UserResource.php
+³           ³       
+³           ÃÄÄÄLegal
+³           ³       LegalDocumentResource.php
+³           ³       
+³           ÃÄÄÄProduct
+³           ³       BrandResource.php
+³           ³       CategoryResource.php
+³           ³       ProductCollection.php
+³           ³       ProductResource.php
+³           ³       
+³           ÀÄÄÄSupport
+³                   FaqCategoryResource.php
+³                   FaqResource.php
+³                   SupportTicketResource.php
+³                   TicketMessageResource.php
+³                   
+ÃÄÄÄModels
+³   ³   RefreshToken.php
+³   ³   User.php
+³   ³   
+³   ÃÄÄÄAdmin
+³   ³       AdminLog.php
+³   ³       Currency.php
+³   ³       NewsletterSubscriber.php
+³   ³       Setting.php
+³   ³       
+³   ÃÄÄÄCatalog
+³   ³       Brand.php
+³   ³       Category.php
+³   ³       Product.php
+³   ³       ProductAttribute.php
+³   ³       ProductImage.php
+³   ³       ProductSpecification.php
+³   ³       ProductVariant.php
+³   ³       Stock.php
+³   ³       StockMovement.php
+³   ³       Subcategory.php
+³   ³       Tag.php
+³   ³       Warehouse.php
+³   ³       
+³   ÃÄÄÄConfig
+³   ³       City.php
+³   ³       Country.php
+³   ³       Language.php
+³   ³       
+³   ÃÄÄÄInventory
+³   ÃÄÄÄLegal
+³   ³       LegalDocument.php
+³   ³       
+³   ÃÄÄÄMarketing
+³   ³       Banner.php
+³   ³       Coupon.php
+³   ³       FlashSale.php
+³   ³       Promotion.php
+³   ³       
+³   ÃÄÄÄOrder
+³   ³       Cart.php
+³   ³       CartItem.php
+³   ³       Order.php
+³   ³       OrderItem.php
+³   ³       OrderStatusHistory.php
+³   ³       OrderTracking.php
+³   ³       ShippingMethod.php
+³   ³       Supplier.php
+³   ³       
+³   ÃÄÄÄPayment
+³   ³       Payment.php
+³   ³       PaymentMethod.php
+³   ³       Refund.php
+³   ³       Transaction.php
+³   ³       
+³   ÃÄÄÄReview
+³   ³       Favorite.php
+³   ³       Review.php
+³   ³       ReviewImage.php
+³   ³       ReviewVote.php
+³   ³       
+³   ÃÄÄÄSupport
+³   ³       Faq.php
+³   ³       FaqCategory.php
+³   ³       Notification.php
+³   ³       SupportTicket.php
+³   ³       TicketMessage.php
+³   ³       
+³   ÀÄÄÄUser
+³           Permission.php
+³           Role.php
+³           UserAddress.php
+³           UserProfile.php
+³           
+ÀÄÄÄProviders
+        AppServiceProvider.php
+        

@@ -4,102 +4,73 @@ namespace App\Models\Support;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
 
 class Faq extends Model
 {
     use SoftDeletes;
 
     /**
-     * Table associée au modèle
-     * 
-     * @var string
-     */
-    protected $table = 'faqs';
-
-    /**
-     * Attributs assignables en masse
-     * 
-     * @var array<int, string>
+     * Les attributs assignables en masse.
+     *
+     * @var array<string>
      */
     protected $fillable = [
+        'faq_category_id',
         'question',
         'answer',
-        'category',
+        'slug',
+        'is_active',
+        'is_popular',
+        'sort_order',
         'views_count',
         'helpful_count',
-        'position',
-        'is_active',
-        'is_featured',
     ];
 
     /**
-     * Attributs à caster
-     * 
+     * Les attributs à caster.
+     *
      * @var array<string, string>
      */
     protected $casts = [
+        'is_active' => 'boolean',
+        'is_popular' => 'boolean',
+        'sort_order' => 'integer',
         'views_count' => 'integer',
         'helpful_count' => 'integer',
-        'position' => 'integer',
-        'is_active' => 'boolean',
-        'is_featured' => 'boolean',
     ];
 
     /**
-     * Dates à traiter comme des dates Carbon
-     * 
-     * @var array<string>
+     * Boot du modèle.
      */
-    protected $dates = [
-        'created_at',
-        'updated_at',
-        'deleted_at',
-    ];
-
-    /**
-     * Accesseur : Catégorie en français
-     * 
-     * @return string
-     */
-    public function getCategoryLabelAttribute(): string
+    protected static function boot(): void
     {
-        return match($this->category) {
-            'general' => 'Général',
-            'orders' => 'Commandes',
-            'shipping' => 'Livraison',
-            'payments' => 'Paiements',
-            'returns' => 'Retours',
-            'account' => 'Compte',
-            'products' => 'Produits',
-            default => $this->category,
-        };
+        parent::boot();
+
+        static::creating(function (Faq $faq) {
+            if (empty($faq->slug)) {
+                $faq->slug = Str::slug($faq->question);
+            }
+        });
+
+        static::updating(function (Faq $faq) {
+            if (empty($faq->slug)) {
+                $faq->slug = Str::slug($faq->question);
+            }
+        });
     }
 
     /**
-     * Méthode : Incrémenter le compteur de vues
-     * 
-     * @return void
+     * La catégorie de cette FAQ.
      */
-    public function incrementViews(): void
+    public function category(): BelongsTo
     {
-        $this->increment('views_count');
+        return $this->belongsTo(FaqCategory::class, 'faq_category_id');
     }
 
     /**
-     * Méthode : Incrémenter le compteur de votes utiles
-     * 
-     * @return void
-     */
-    public function incrementHelpful(): void
-    {
-        $this->increment('helpful_count');
-    }
-
-    /**
-     * Scope : FAQs actives
-     * 
-     * @param \Illuminate\Database\Eloquent\Builder $query
-     * @return \Illuminate\Database\Eloquent\Builder
+     * Scope : FAQs actives.
      */
     public function scopeActive($query)
     {
@@ -107,37 +78,35 @@ class Faq extends Model
     }
 
     /**
-     * Scope : FAQs mises en avant
-     * 
-     * @param \Illuminate\Database\Eloquent\Builder $query
-     * @return \Illuminate\Database\Eloquent\Builder
+     * Scope : FAQs populaires.
      */
-    public function scopeFeatured($query)
+    public function scopePopular($query)
     {
-        return $query->where('is_featured', true);
+        return $query->where('is_popular', true);
     }
 
     /**
-     * Scope : FAQs par catégorie
-     * 
-     * @param \Illuminate\Database\Eloquent\Builder $query
-     * @param string $category
-     * @return \Illuminate\Database\Eloquent\Builder
-     */
-    public function scopeByCategory($query, string $category)
-    {
-        return $query->where('category', $category);
-    }
-
-    /**
-     * Scope : FAQs triées
-     * 
-     * @param \Illuminate\Database\Eloquent\Builder $query
-     * @return \Illuminate\Database\Eloquent\Builder
+     * Scope : triées par ordre.
      */
     public function scopeOrdered($query)
     {
-        return $query->orderBy('position', 'asc')
-                     ->orderBy('id', 'asc');
+        return $query->orderBy('sort_order', 'asc')
+                     ->orderBy('created_at', 'desc');
+    }
+
+    /**
+     * Incrémenter le compteur de vues.
+     */
+    public function incrementViews(): void
+    {
+        $this->increment('views_count');
+    }
+
+    /**
+     * Incrémenter le compteur d'aide.
+     */
+    public function incrementHelpful(): void
+    {
+        $this->increment('helpful_count');
     }
 }

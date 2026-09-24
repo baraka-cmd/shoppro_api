@@ -17,6 +17,13 @@ use App\Http\Controllers\Api\Admin\AdminPromotionController;
 use App\Http\Controllers\Api\Admin\AdminSettingController;
 use App\Http\Controllers\Api\Admin\AdminNotificationController;
 use App\Http\Controllers\Api\Admin\AdminUserController;
+use App\Http\Controllers\Api\Support\FaqController;
+use App\Http\Controllers\Api\Support\FaqCategoryController;
+use App\Http\Controllers\Api\Support\SupportTicketController;
+use App\Http\Controllers\Api\Support\TicketMessageController;
+use App\Http\Controllers\Api\Support\ContactController;
+use App\Http\Controllers\Api\Legal\LegalDocumentController;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -343,6 +350,67 @@ Route::prefix('users')->group(function () {
         Route::get('/brands', [BrandController::class, 'stats']);
     });
     
+});
+
+
+
+
+
+
+/*
+|--------------------------------------------------------------------------
+| API Routes - Support & Légal
+|--------------------------------------------------------------------------
+*/
+
+// ============================================
+// FAQ (PUBLIQUES)
+// ============================================
+Route::prefix('faqs')->group(function () {
+    Route::get('/', [FaqController::class, 'index']);
+    Route::get('/{id}', [FaqController::class, 'show']);
+    Route::post('/{id}/helpful', [FaqController::class, 'markHelpful']);
+});
+
+// ============================================
+// CATÉGORIES DE FAQ (PUBLIQUES)
+// ============================================
+Route::prefix('faq-categories')->group(function () {
+    Route::get('/', [FaqCategoryController::class, 'index']);
+    Route::get('/{id}', [FaqCategoryController::class, 'show']);
+});
+
+// ============================================
+// CONTACT (PUBLIQUE AVEC RATE LIMITING)
+// ============================================
+Route::post('/contact', [ContactController::class, 'store'])
+    ->middleware('throttle:10,1');
+
+// ============================================
+// DOCUMENTS LÉGAUX (PUBLIQUES)
+// ============================================
+Route::prefix('legal/documents')->group(function () {
+    Route::get('/', [LegalDocumentController::class, 'index']);
+    Route::get('/type/{type}', [LegalDocumentController::class, 'showByType']);
+    Route::get('/{slug}', [LegalDocumentController::class, 'show']);
+});
+
+// ============================================
+// TICKETS DE SUPPORT (AUTHENTIFIÉES)
+// ============================================
+Route::middleware('auth:sanctum')->group(function () {
+    Route::prefix('support/tickets')->group(function () {
+        Route::get('/', [SupportTicketController::class, 'index']);
+        Route::post('/', [SupportTicketController::class, 'store']);
+        Route::get('/{id}', [SupportTicketController::class, 'show']);
+        Route::post('/{id}/close', [SupportTicketController::class, 'close']);
+    });
+
+    // Messages des tickets
+    Route::prefix('support/tickets/{ticketId}/messages')->group(function () {
+        Route::get('/', [TicketMessageController::class, 'index']);
+        Route::post('/', [TicketMessageController::class, 'store']);
+    });
 });
 
 // ============================================

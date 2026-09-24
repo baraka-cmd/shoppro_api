@@ -2,26 +2,22 @@
 
 namespace App\Models\Support;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\User;
 use App\Models\Order\Order;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class SupportTicket extends Model
 {
     use SoftDeletes;
 
     /**
-     * Table associée au modèle
-     * 
-     * @var string
-     */
-    protected $table = 'support_tickets';
-
-    /**
-     * Attributs assignables en masse
-     * 
-     * @var array<int, string>
+     * Les attributs assignables en masse.
+     *
+     * @var array<string>
      */
     protected $fillable = [
         'ticket_number',
@@ -30,8 +26,8 @@ class SupportTicket extends Model
         'subject',
         'description',
         'category',
-        'priority',
         'status',
+        'priority',
         'assigned_to',
         'resolved_at',
         'closed_at',
@@ -40,8 +36,8 @@ class SupportTicket extends Model
     ];
 
     /**
-     * Attributs à caster
-     * 
+     * Les attributs à caster.
+     *
      * @var array<string, string>
      */
     protected $casts = [
@@ -52,144 +48,151 @@ class SupportTicket extends Model
     ];
 
     /**
-     * Dates à traiter comme des dates Carbon
-     * 
-     * @var array<string>
+     * Boot du modèle.
      */
-    protected $dates = [
-        'created_at',
-        'updated_at',
-        'deleted_at',
-        'resolved_at',
-        'closed_at',
-        'last_reply_at',
-    ];
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        static::creating(function (SupportTicket $ticket) {
+            if (empty($ticket->ticket_number)) {
+                $ticket->ticket_number = self::generateTicketNumber();
+            }
+        });
+    }
 
     /**
-     * Relation : Le ticket appartient à un utilisateur
-     * 
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     * Générer un numéro de ticket unique.
      */
-    public function user()
+    public static function generateTicketNumber(): string
+    {
+        $date = now()->format('Ymd');
+        $random = Str::upper(Str::random(6));
+        $ticketNumber = "SUP-{$date}-{$random}";
+
+        // Vérifier l'unicité
+        while (self::where('ticket_number', $ticketNumber)->exists()) {
+            $random = Str::upper(Str::random(6));
+            $ticketNumber = "SUP-{$date}-{$random}";
+        }
+
+        return $ticketNumber;
+    }
+
+    /**
+     * L'utilisateur propriétaire du ticket.
+     */
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
     /**
-     * Relation : Le ticket concerne une commande (optionnel)
-     * 
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     * La commande liée au ticket (optionnelle).
      */
-    public function order()
+    public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
     }
 
     /**
-     * Relation : Agent assigné au ticket
-     * 
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     * Les messages de ce ticket.
      */
-    public function assignedAgent()
+    public function messages(): HasMany
     {
-        return $this->belongsTo(User::class, 'assigned_to');
+        return $this->hasMany(TicketMessage::class, 'support_ticket_id');
     }
 
     /**
-     * Relation : Messages du ticket
-     * 
-     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     * Scope : tickets ouverts.
      */
-    public function messages()
+    public function scopeOpen($query)
     {
-        return $this->hasMany(TicketMessage::class);
+        return $query->where('status', 'open');
     }
 
     /**
-     * Accesseur : Statut en français
-     * 
-     * @return string
+     * Scope : tickets en attente.
+     *
+     * Dans la base de données, le statut utilisé est "pending".
      */
-    public function getStatusLabelAttribute(): string
+    public function scopePending($query)
     {
-        return match($this->status) {
-            'open' => 'Ouvert',
-            'pending' => 'En attente',
-            'resolved' => 'Résolu',
-            'closed' => 'Fermé',
-            'reopened' => 'Réouvert',
-            default => $this->status,
-        };
+        return $query->where('status', 'pending');
     }
 
     /**
-     * Accesseur : Priorité en français
-     * 
-     * @return string
+     * Scope : tickets résolus.
      */
-    public function getPriorityLabelAttribute(): string
+    public function scopeResolved($query)
     {
-        return match($this->priority) {
-            'low' => 'Faible',
-            'medium' => 'Moyenne',
-            'high' => 'Haute',
-            'urgent' => 'Urgente',
-            default => $this->priority,
-        };
+        return $query->where('status', 'resolved');
     }
 
     /**
-     * Accesseur : Catégorie en français
-     * 
-     * @return string
+     * Scope : tickets fermés.
      */
-    public function getCategoryLabelAttribute(): string
+    public function scopeClosed($query)
     {
-        return match($this->category) {
-            'order' => 'Commande',
-            'payment' => 'Paiement',
-            'delivery' => 'Livraison',
-            'product' => 'Produit',
-            'account' => 'Compte',
-            'technical' => 'Technique',
-            'other' => 'Autre',
-            default => $this->category,
-        };
+        return $query->where('status', 'closed');
     }
 
     /**
-     * Méthode : Générer un numéro de ticket unique
-     * 
-     * @return string
+     * Scope : tickets réouverts.
      */
-    public static function generateTicketNumber(): string
+    public function scopeReopened($query)
     {
-        $prefix = 'TKT';
-        $date = now()->format('Ymd');
-        $random = strtoupper(substr(uniqid(), -6));
-        
-        return $prefix . '-' . $date . '-' . $random;
+        return $query->where('status', 'reopened');
     }
 
     /**
-     * Méthode : Fermer le ticket
-     * 
-     * @return void
+     * Scope : tickets par catégorie.
      */
-    public function close(): void
+    public function scopeByCategory($query, string $category)
+    {
+        return $query->where('category', $category);
+    }
+
+    /**
+     * Scope : tickets par priorité.
+     */
+    public function scopeByPriority($query, string $priority)
+    {
+        return $query->where('priority', $priority);
+    }
+
+    /**
+     * Scope : tickets pour un utilisateur.
+     */
+    public function scopeForUser($query, int $userId)
+    {
+        return $query->where('user_id', $userId);
+    }
+
+    /**
+     * Marquer comme ouvert.
+     */
+    public function markAsOpen(): void
     {
         $this->update([
-            'status' => 'closed',
-            'closed_at' => now(),
+            'status' => 'open',
         ]);
     }
 
     /**
-     * Méthode : Résoudre le ticket
-     * 
-     * @return void
+     * Marquer comme en attente.
      */
-    public function resolve(): void
+    public function markAsPending(): void
+    {
+        $this->update([
+            'status' => 'pending',
+        ]);
+    }
+
+    /**
+     * Marquer comme résolu.
+     */
+    public function markAsResolved(): void
     {
         $this->update([
             'status' => 'resolved',
@@ -198,11 +201,20 @@ class SupportTicket extends Model
     }
 
     /**
-     * Méthode : Réouvrir le ticket
-     * 
-     * @return void
+     * Marquer comme fermé.
      */
-    public function reopen(): void
+    public function markAsClosed(): void
+    {
+        $this->update([
+            'status' => 'closed',
+            'closed_at' => now(),
+        ]);
+    }
+
+    /**
+     * Marquer comme réouvert.
+     */
+    public function markAsReopened(): void
     {
         $this->update([
             'status' => 'reopened',
@@ -212,36 +224,63 @@ class SupportTicket extends Model
     }
 
     /**
-     * Scope : Tickets ouverts
-     * 
-     * @param \Illuminate\Database\Eloquent\Builder $query
-     * @return \Illuminate\Database\Eloquent\Builder
+     * Le ticket est-il ouvert ?
      */
-    public function scopeOpen($query)
+    public function isOpen(): bool
     {
-        return $query->whereIn('status', ['open', 'pending', 'reopened']);
+        return $this->status === 'open';
     }
 
     /**
-     * Scope : Tickets résolus
-     * 
-     * @param \Illuminate\Database\Eloquent\Builder $query
-     * @return \Illuminate\Database\Eloquent\Builder
+     * Le ticket est-il en attente ?
      */
-    public function scopeResolved($query)
+    public function isPending(): bool
     {
-        return $query->where('status', 'resolved');
+        return $this->status === 'pending';
     }
 
     /**
-     * Scope : Tickets par priorité
-     * 
-     * @param \Illuminate\Database\Eloquent\Builder $query
-     * @param string $priority
-     * @return \Illuminate\Database\Eloquent\Builder
+     * Le ticket est-il résolu ?
      */
-    public function scopeByPriority($query, string $priority)
+    public function isResolved(): bool
     {
-        return $query->where('priority', $priority);
+        return $this->status === 'resolved';
+    }
+
+    /**
+     * Le ticket est-il fermé ?
+     */
+    public function isClosed(): bool
+    {
+        return $this->status === 'closed';
+    }
+
+    /**
+     * Le ticket est-il réouvert ?
+     */
+    public function isReopened(): bool
+    {
+        return $this->status === 'reopened';
+    }
+
+    /**
+     * Nombre de messages non lus.
+     */
+    public function getUnreadMessagesCountAttribute(): int
+    {
+        return $this->messages()
+            ->where('is_read', false)
+            ->where('sender_type', 'admin')
+            ->count();
+    }
+
+    /**
+     * Dernier message du ticket.
+     */
+    public function getLastMessageAttribute(): ?TicketMessage
+    {
+        return $this->messages()
+            ->latest()
+            ->first();
     }
 }
