@@ -24,7 +24,6 @@ use App\Http\Controllers\Api\Support\TicketMessageController;
 use App\Http\Controllers\Api\Support\ContactController;
 use App\Http\Controllers\Api\Legal\LegalDocumentController;
 
-
 /*
 |--------------------------------------------------------------------------
 | API Routes - ShopPro
@@ -82,6 +81,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/{id}', [BannerController::class, 'show']);
     });
     
+    
 });
 
 // ============================================
@@ -107,10 +107,12 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     });
     
     // ============ AVIS (CLIENT) ============
+        // ============ AVIS (CLIENT) ============
     Route::prefix('reviews')->group(function () {
         Route::post('/', [ReviewController::class, 'store']);
         Route::put('/{id}', [ReviewController::class, 'update']);
         Route::delete('/{id}', [ReviewController::class, 'destroy']);
+        Route::post('/{id}/vote', [ReviewController::class, 'vote']); // 👈 NOUVEAU
     });
     
 });
@@ -343,6 +345,7 @@ Route::prefix('users')->group(function () {
         Route::delete('/{id}', [AdminNotificationController::class, 'destroy']);
     });
 
+    
     // ============ STATISTIQUES ============
     Route::prefix('stats')->group(function () {
         Route::get('/products', [ProductController::class, 'stats']);
