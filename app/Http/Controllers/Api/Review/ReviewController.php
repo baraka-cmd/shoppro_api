@@ -16,52 +16,125 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
+
 class ReviewController extends Controller
 {
     // ============================================
     // LISTE DES AVIS D'UN PRODUIT (PUBLIC)
     // ============================================
-    public function index(Request $request, $productId)
-    {
-        try {
-            $perPage = (int) $request->query('per_page', 10);
-            $perPage = min(max($perPage, 1), 50);
+    // ============================================
+// LISTE DES AVIS D'UN PRODUIT (PUBLIC)
+// ============================================
+public function index(Request $request, $productId)
+{
+    try {
+        // Pagination sécurisée
+        $perPage = (int) $request->query('per_page', 10);
+        $perPage = min(max($perPage, 1), 50);
 
-            $product = Product::find($productId);
-            if (!$product) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Produit introuvable.',
-                ], 404);
-            }
-
-            $reviews = Review::with(['user.profile', 'images'])
-                ->where('product_id', $productId)
-                ->where('status', 'approved')
-                ->orderByDesc('created_at')
-                ->paginate($perPage);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Liste des avis.',
-                'data' => ReviewResource::collection($reviews->items()),
-                'pagination' => [
-                    'total' => $reviews->total(),
-                    'count' => $reviews->count(),
-                    'per_page' => $reviews->perPage(),
-                    'current_page' => $reviews->currentPage(),
-                    'last_page' => $reviews->lastPage(),
-                    'has_more' => $reviews->hasMorePages(),
-                ],
-            ], 200);
-        } catch (\Exception $e) {
+        // Vérifier que le produit existe
+        $product = Product::find($productId);
+        if (!$product) {
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors de la récupération des avis.',
-                'error' => $e->getMessage(),
-            ], 500);
+                'message' => 'Produit introuvable.',
+            ], 404);
         }
+
+        // Filtres optionnels
+        $ratingFilter = $request->query('rating');          // ex: 5, 4, 3...
+        $withPhotos = $request->query('with_photos');       // '1' ou 'true'
+        $verifiedOnly = $request->query('verified');        // '1' ou 'true'
+        $sortBy = $request->query('sort_by', 'recent');     // recent|helpful|rating_desc|rating_asc
+
+        // Requête de base
+        $query = Review::with(['user.profile', 'images'])
+            ->where('product_id', $productId)
+            ->where('status', 'approved');
+
+        // Filtre : note spécifique
+        if ($ratingFilter !== null && $ratingFilter !== '') {
+            $query->where('rating', (int) $ratingFilter);
+        }
+
+        // Filtre : avec photos uniquement
+        if ($withPhotos === '1' || $withPhotos === 'true') {
+            $query->whereHas('images');
+        }
+
+        // Filtre : achats vérifiés uniquement
+        if ($verifiedOnly === '1' || $verifiedOnly === 'true') {
+            $query->where('is_verified_purchase', true);
+        }
+
+        // Tri
+        switch ($sortBy) {
+            case 'helpful':
+                $query->orderByDesc('helpful_count');
+                break;
+            case 'rating_desc':
+                $query->orderByDesc('rating')->orderByDesc('created_at');
+                break;
+            case 'rating_asc':
+                $query->orderBy('rating')->orderByDesc('created_at');
+                break;
+            case 'recent':
+            default:
+                $query->orderByDesc('created_at');
+                break;
+        }
+
+        // Pagination
+        $reviews = $query->paginate($perPage);
+
+        // Statistiques (note moyenne + distribution)
+        $stats = Review::where('product_id', $productId)
+            ->where('status', 'approved')
+            ->selectRaw('
+                COUNT(*) as total,
+                AVG(rating) as average_rating
+            ')
+            ->first();
+
+        $distribution = Review::where('product_id', $productId)
+            ->where('status', 'approved')
+            ->selectRaw('rating, COUNT(*) as count')
+            ->groupBy('rating')
+            ->pluck('count', 'rating')
+            ->toArray();
+
+        // Normaliser la distribution (5 à 1)
+        $ratingDistribution = [];
+        for ($i = 5; $i >= 1; $i--) {
+            $ratingDistribution[$i] = $distribution[$i] ?? 0;
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Liste des avis.',
+            'data' => ReviewResource::collection($reviews->items()),
+            'stats' => [
+                'average_rating' => round($stats->average_rating ?? 0, 2),
+                'total_reviews' => (int) ($stats->total ?? 0),
+                'rating_distribution' => $ratingDistribution,
+            ],
+            'pagination' => [
+                'total' => $reviews->total(),
+                'count' => $reviews->count(),
+                'per_page' => $reviews->perPage(),
+                'current_page' => $reviews->currentPage(),
+                'last_page' => $reviews->lastPage(),
+                'has_more' => $reviews->hasMorePages(),
+            ],
+        ], 200);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la récupération des avis.',
+            'error' => $e->getMessage(),
+        ], 500);
     }
+}
 
     // ============================================
     // CRÉER UN AVIS (AUTHENTIFIÉ)

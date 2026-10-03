@@ -1086,4 +1086,76 @@ class AdminOrderController extends Controller
             ], 500);
         }
     }
+
+    // ============================================
+// GÉNÉRATION DE LA FACTURE PDF (ADMIN)
+// ============================================
+/**
+ * Télécharger la facture PDF d'une commande.
+ *
+ * Endpoint : GET /api/v1/admin/orders/{id}/invoice
+ *
+ * @param int $id
+ * @return \Illuminate\Http\Response|\Illuminate\Http\JsonResponse
+ */
+public function invoice($id)
+{
+    try {
+        // Charger la commande avec toutes ses relations
+        $order = Order::with([
+            'user.profile',
+            'items.product',
+            'items.variant',
+            'shippingAddress',
+            'billingAddress',
+            'payments',
+        ])->find($id);
+
+        if (!$order) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Commande introuvable.',
+            ], 404);
+        }
+
+        // Vérifier que dompdf est disponible
+        if (!class_exists(\Barryvdh\DomPDF\Facade\Pdf::class)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Le générateur de PDF n\'est pas installé sur le serveur.',
+            ], 500);
+        }
+
+        // Préparer les données pour la vue
+        $data = [
+            'order' => $order,
+            'user' => $order->user,
+            'items' => $order->items,
+            'shippingAddress' => $order->shippingAddress,
+            'billingAddress' => $order->billingAddress,
+            'payments' => $order->payments,
+            'generated_at' => now(),
+            'invoice_number' => 'FAC-' . $order->order_number,
+        ];
+
+        // Générer le PDF
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView(
+            'invoices.order',
+            $data
+        )->setPaper('A4', 'portrait');
+
+        // Nom du fichier
+        $filename = 'facture-' . $order->order_number . '.pdf';
+
+        // Retourner le PDF en téléchargement
+        return $pdf->download($filename);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la génération de la facture.',
+            'error' => $e->getMessage(),
+        ], 500);
+    }
+}
 }

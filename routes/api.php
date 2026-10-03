@@ -7,8 +7,7 @@ use App\Http\Controllers\Api\Product\ProductController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\BrandController;
 use App\Http\Controllers\Api\Banner\BannerController;
-use App\Http\Controllers\Api\FavoriteController;
-use App\Http\Controllers\Api\ReviewController;
+//use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\Dashboard\DashboardController;
 use App\Http\Controllers\Api\Admin\AdminOrderController;
 use App\Http\Controllers\Api\Admin\AdminReviewController;
@@ -23,6 +22,12 @@ use App\Http\Controllers\Api\Support\SupportTicketController;
 use App\Http\Controllers\Api\Support\TicketMessageController;
 use App\Http\Controllers\Api\Support\ContactController;
 use App\Http\Controllers\Api\Legal\LegalDocumentController;
+use App\Http\Controllers\Api\Review\ReviewController;
+use App\Http\Controllers\Api\Order\OrderController;
+use App\Http\Controllers\Api\Address\AddressController;
+
+
+
 
 /*
 |--------------------------------------------------------------------------
@@ -56,7 +61,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/category/{categoryId}', [ProductController::class, 'byCategory']);
         Route::get('/brand/{brandId}', [ProductController::class, 'byBrand']);
         Route::get('/{id}/similar', [ProductController::class, 'similar']);
-        Route::get('/{id}/reviews', [ProductController::class, 'productReviews']);
+        Route::get('/{id}/reviews', [ReviewController::class, 'index']);
         Route::get('/{id}', [ProductController::class, 'show']);
     });
     
@@ -100,19 +105,55 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     });
     
     // ============ FAVORIS (CLIENT) ============
-    Route::prefix('favorites')->group(function () {
-        Route::get('/', [FavoriteController::class, 'index']);
-        Route::post('/toggle/{productId}', [FavoriteController::class, 'toggle']);
-        Route::delete('/{id}', [FavoriteController::class, 'remove']);
-    });
+    // Route::prefix('favorites')->group(function () {
+    //     Route::get('/', [FavoriteController::class, 'index']);
+    //     Route::post('/toggle/{productId}', [FavoriteController::class, 'toggle']);
+    //     Route::delete('/{id}', [FavoriteController::class, 'remove']);
+    // });
     
     // ============ AVIS (CLIENT) ============
-        // ============ AVIS (CLIENT) ============
     Route::prefix('reviews')->group(function () {
         Route::post('/', [ReviewController::class, 'store']);
         Route::put('/{id}', [ReviewController::class, 'update']);
         Route::delete('/{id}', [ReviewController::class, 'destroy']);
         Route::post('/{id}/vote', [ReviewController::class, 'vote']); // 👈 NOUVEAU
+    });
+
+    Route::prefix('addresses')->group(function () {
+        Route::get('/', [AddressController::class, 'index']);
+        Route::post('/', [AddressController::class, 'store']);
+        Route::get('/{id}', [AddressController::class, 'show']);
+        Route::put('/{id}', [AddressController::class, 'update']);
+        Route::delete('/{id}', [AddressController::class, 'destroy']);
+        Route::post('/{id}/set-default', [AddressController::class, 'setDefault']);
+    });
+
+    // ============ COMMANDES (CLIENT) ============
+    Route::prefix('orders')->group(function () {
+        // ============================================
+        // LISTE ET CRÉATION
+        // ============================================
+        Route::get('/', [OrderController::class, 'index']);
+        Route::post('/', [OrderController::class, 'store']);
+
+        // ============================================
+        // DÉTAILS
+        // ============================================
+        Route::get('/{id}', [OrderController::class, 'show']);
+
+        // ============================================
+        // ACTIONS
+        // ============================================
+        Route::post('/{id}/cancel', [OrderController::class, 'cancel']);
+        Route::get('/{id}/track', [OrderController::class, 'track']);
+
+
+
+        // ============================================
+        // 🆕 FACTURE PDF
+        // ============================================
+        Route::get('/{id}/invoice', [OrderController::class, 'invoice']);
+        Route::get('/by-number/{orderNumber}/invoice', [OrderController::class, 'invoiceByNumber']);
     });
     
 });
@@ -192,38 +233,76 @@ Route::prefix('users')->group(function () {
         Route::get('/performance', [DashboardController::class, 'performance']);
     });
 
-    // ============ COMMANDES ============
-    Route::prefix('orders')->group(function () {
-        Route::get('/', [AdminOrderController::class, 'index']);
-        Route::get('/pending', [AdminOrderController::class, 'pending']);
-        Route::get('/confirmed', [AdminOrderController::class, 'confirmed']);
-        Route::get('/processing', [AdminOrderController::class, 'processing']);
-        Route::get('/shipped', [AdminOrderController::class, 'shipped']);
-        Route::get('/delivered', [AdminOrderController::class, 'delivered']);
-        Route::get('/cancelled', [AdminOrderController::class, 'cancelled']);
-        Route::get('/by-user/{userId}', [AdminOrderController::class, 'byUser']);
-        Route::get('/by-number/{orderNumber}', [AdminOrderController::class, 'showByNumber']);
-        Route::get('/stats/count', [AdminOrderController::class, 'statsCount']);
-        Route::get('/stats/by-status', [AdminOrderController::class, 'statsByStatus']);
-        Route::get('/stats/total-revenue', [AdminOrderController::class, 'statsTotalRevenue']);
-        Route::get('/{id}/history', [AdminOrderController::class, 'history']);
-        Route::get('/{id}/tracking', [AdminOrderController::class, 'tracking']);
-        Route::get('/{id}/notes', [AdminOrderController::class, 'notes']);
-        Route::get('/{id}', [AdminOrderController::class, 'show']);
-        Route::post('/{id}/confirm', [AdminOrderController::class, 'confirm']);
-        Route::post('/{id}/process', [AdminOrderController::class, 'process']);
-        Route::post('/{id}/ship', [AdminOrderController::class, 'ship']);
-        Route::post('/{id}/deliver', [AdminOrderController::class, 'deliver']);
-        Route::post('/{id}/cancel', [AdminOrderController::class, 'cancel']);
-        Route::post('/{id}/refund', [AdminOrderController::class, 'refund']);
-        Route::post('/{id}/return', [AdminOrderController::class, 'returnOrder']);
-        Route::post('/{id}/payment/paid', [AdminOrderController::class, 'markPaymentAsPaid']);
-        Route::post('/{id}/payment/failed', [AdminOrderController::class, 'markPaymentAsFailed']);
-        Route::post('/{id}/payment/refunded', [AdminOrderController::class, 'markPaymentAsRefunded']);
-        Route::post('/{id}/notes', [AdminOrderController::class, 'addNote']);
-        Route::post('/{id}/restore', [AdminOrderController::class, 'restore']);
-        Route::delete('/{id}', [AdminOrderController::class, 'destroy']);
-    });
+    // ============ COMMANDES (ADMIN) ============
+Route::prefix('orders')->group(function () {
+    // ============================================
+    // LISTE ET FILTRES
+    // ============================================
+    Route::get('/', [AdminOrderController::class, 'index']);
+    Route::get('/pending', [AdminOrderController::class, 'pending']);
+    Route::get('/confirmed', [AdminOrderController::class, 'confirmed']);
+    Route::get('/processing', [AdminOrderController::class, 'processing']);
+    Route::get('/shipped', [AdminOrderController::class, 'shipped']);
+    Route::get('/delivered', [AdminOrderController::class, 'delivered']);
+    Route::get('/cancelled', [AdminOrderController::class, 'cancelled']);
+
+    // ============================================
+    // RECHERCHE ET FILTRES SPÉCIAUX
+    // ============================================
+    Route::get('/by-user/{userId}', [AdminOrderController::class, 'byUser']);
+    Route::get('/by-number/{orderNumber}', [AdminOrderController::class, 'showByNumber']);
+
+    // ============================================
+    // STATISTIQUES
+    // ============================================
+    Route::get('/stats/count', [AdminOrderController::class, 'statsCount']);
+    Route::get('/stats/by-status', [AdminOrderController::class, 'statsByStatus']);
+    Route::get('/stats/total-revenue', [AdminOrderController::class, 'statsTotalRevenue']);
+
+    // ============================================
+    // SOUS-RESSOURCES D'UNE COMMANDE
+    // ============================================
+    Route::get('/{id}/history', [AdminOrderController::class, 'history']);
+    Route::get('/{id}/tracking', [AdminOrderController::class, 'tracking']);
+    Route::get('/{id}/notes', [AdminOrderController::class, 'notes']);
+
+    // 🆕 FACTURE PDF
+    Route::get('/{id}/invoice', [AdminOrderController::class, 'invoice']);
+    
+    // ============================================
+    // DÉTAILS
+    // ============================================
+    Route::get('/{id}', [AdminOrderController::class, 'show']);
+
+    // ============================================
+    // ACTIONS SUR LE STATUT
+    // ============================================
+    Route::post('/{id}/confirm', [AdminOrderController::class, 'confirm']);
+    Route::post('/{id}/process', [AdminOrderController::class, 'process']);
+    Route::post('/{id}/ship', [AdminOrderController::class, 'ship']);
+    Route::post('/{id}/deliver', [AdminOrderController::class, 'deliver']);
+    Route::post('/{id}/cancel', [AdminOrderController::class, 'cancel']);
+    Route::post('/{id}/refund', [AdminOrderController::class, 'refund']);
+    Route::post('/{id}/return', [AdminOrderController::class, 'returnOrder']);
+
+    // ============================================
+    // ACTIONS SUR LE PAIEMENT
+    // ============================================
+    Route::post('/{id}/payment/paid', [AdminOrderController::class, 'markPaymentAsPaid']);
+    Route::post('/{id}/payment/failed', [AdminOrderController::class, 'markPaymentAsFailed']);
+    Route::post('/{id}/payment/refunded', [AdminOrderController::class, 'markPaymentAsRefunded']);
+
+    // ============================================
+    // NOTES ADMIN
+    // ============================================
+    Route::post('/{id}/notes', [AdminOrderController::class, 'addNote']);
+
+    // ============================================
+    // SOFT DELETE
+    // ============================================
+    Route::post('/{id}/restore', [AdminOrderController::class, 'restore']);
+    Route::delete('/{id}', [AdminOrderController::class, 'destroy']);
+});
 
     // ============ AVIS ============
     Route::prefix('reviews')->group(function () {
