@@ -190,17 +190,22 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'role:admin'])->group(fun
 // ============ UTILISATEURS ============
 Route::prefix('users')->group(function () {
     Route::get('/', [AdminUserController::class, 'index']);
+    Route::post('/', [AdminUserController::class, 'store']);
     Route::get('/recent', [AdminUserController::class, 'recent']);
-    Route::get('/by-email/{email}', [AdminUserController::class, 'showByEmail']);
     Route::get('/stats/count', [AdminUserController::class, 'statsCount']);
     Route::get('/stats/by-role', [AdminUserController::class, 'statsByRole']);
+    Route::get('/by-email/{email}', [AdminUserController::class, 'showByEmail']);
     Route::get('/{id}', [AdminUserController::class, 'show']);
-    Route::post('/', [AdminUserController::class, 'store']);
     Route::put('/{id}', [AdminUserController::class, 'update']);
+    Route::delete('/{id}', [AdminUserController::class, 'destroy']);
+    Route::post('/{id}/restore', [AdminUserController::class, 'restore']);
     Route::put('/{id}/role', [AdminUserController::class, 'changeRole']);
     Route::post('/{id}/activate', [AdminUserController::class, 'activate']);
     Route::post('/{id}/deactivate', [AdminUserController::class, 'deactivate']);
-    Route::delete('/{id}', [AdminUserController::class, 'destroy']);
+
+    // 🆕 NOUVELLES ROUTES AVATAR
+    Route::post('/{id}/avatar', [AdminUserController::class, 'uploadAvatar']);
+    Route::delete('/{id}/avatar', [AdminUserController::class, 'deleteAvatar']);
 });
 
     // ============ GESTION DES BANNIÈRES ============

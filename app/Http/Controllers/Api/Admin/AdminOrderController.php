@@ -97,32 +97,194 @@ class AdminOrderController extends Controller
      * Endpoint : GET /api/v1/admin/orders/{id}
      */
     public function show($id)
-    {
-        try {
-            $order = Order::with(['user', 'items.product', 'payments', 'statusHistory', 'trackings'])
-                ->find($id);
+{
+    try {
+        $order = Order::with([
+            'user.profile',
+            'items.product',
+            'items.variant',
+            'payments',
+            'statusHistory',
+            'trackings',
+            'shippingAddress',
+            'billingAddress',
+        ])->find($id);
 
-            if (!$order) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Commande introuvable',
-                ], 404);
-            }
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Commande récupérée avec succès',
-                'data' => $order,
-            ], 200);
-
-        } catch (\Exception $e) {
+        if (!$order) {
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors de la récupération de la commande',
-                'error' => $e->getMessage(),
-            ], 500);
+                'message' => 'Commande introuvable',
+            ], 404);
         }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Commande récupérée avec succès',
+            'data' => [
+                // ============================================
+                // CHAMPS DE BASE
+                // ============================================
+                'id' => $order->id,
+                'order_number' => $order->order_number,
+                'user_id' => $order->user_id,
+                'shipping_address_id' => $order->shipping_address_id,
+                'billing_address_id' => $order->billing_address_id,
+                'subtotal' => (float) $order->subtotal,
+                'discount' => (float) $order->discount,
+                'coupon_discount' => (float) $order->coupon_discount,
+                'shipping_fee' => (float) $order->shipping_fee,
+                'tax' => (float) $order->tax,
+                'total' => (float) $order->total,
+                'status' => $order->status,
+                'payment_status' => $order->payment_status,
+                'shipping_method' => $order->shipping_method,
+                'tracking_number' => $order->tracking_number,
+                'estimated_delivery_date' => $order->estimated_delivery_date?->toIso8601String(),
+                'shipped_at' => $order->shipped_at?->toIso8601String(),
+                'delivered_at' => $order->delivered_at?->toIso8601String(),
+                'coupon_code' => $order->coupon_code,
+                'customer_note' => $order->customer_note,
+                'admin_note' => $order->admin_note,
+                'currency' => $order->currency,
+                'cancelled_at' => $order->cancelled_at?->toIso8601String(),
+                'cancellation_reason' => $order->cancellation_reason,
+                'created_at' => $order->created_at?->toIso8601String(),
+                'updated_at' => $order->updated_at?->toIso8601String(),
+
+                // ============================================
+                // UTILISATEUR (CLIENT)
+                // ============================================
+                'user' => $order->user ? [
+                    'id' => $order->user->id,
+                    'name' => $order->user->name,
+                    'email' => $order->user->email,
+                    'avatar' => $order->user->profile?->avatar
+                        ? asset('storage/' . $order->user->profile->avatar)
+                        : null,
+                    'phone' => $order->user->profile?->phone,
+                    'profile' => $order->user->profile ? [
+                        'first_name' => $order->user->profile->first_name,
+                        'last_name' => $order->user->profile->last_name,
+                        'phone' => $order->user->profile->phone,
+                        'country' => $order->user->profile->country,
+                        'city' => $order->user->profile->city,
+                        'address' => $order->user->profile->address,
+                    ] : null,
+                ] : null,
+
+                // ============================================
+                // ADRESSE DE LIVRAISON
+                // ============================================
+                'shipping_address' => $order->shippingAddress ? [
+                    'id' => $order->shippingAddress->id,
+                    'full_name' => $order->shippingAddress->full_name,
+                    'phone' => $order->shippingAddress->phone,
+                    'email' => $order->shippingAddress->email,
+                    'address_line1' => $order->shippingAddress->address_line1,
+                    'address_line2' => $order->shippingAddress->address_line2,
+                    'city' => $order->shippingAddress->city,
+                    'state' => $order->shippingAddress->state,
+                    'postal_code' => $order->shippingAddress->postal_code,
+                    'country' => $order->shippingAddress->country,
+                    'type' => $order->shippingAddress->type,
+                    'is_default' => (bool) $order->shippingAddress->is_default,
+                ] : null,
+
+                // ============================================
+                // ADRESSE DE FACTURATION
+                // ============================================
+                'billing_address' => $order->billingAddress ? [
+                    'id' => $order->billingAddress->id,
+                    'full_name' => $order->billingAddress->full_name,
+                    'phone' => $order->billingAddress->phone,
+                    'email' => $order->billingAddress->email,
+                    'address_line1' => $order->billingAddress->address_line1,
+                    'address_line2' => $order->billingAddress->address_line2,
+                    'city' => $order->billingAddress->city,
+                    'state' => $order->billingAddress->state,
+                    'postal_code' => $order->billingAddress->postal_code,
+                    'country' => $order->billingAddress->country,
+                ] : null,
+
+                // ============================================
+                // ITEMS
+                // ============================================
+                'items' => $order->items->map(function ($item) {
+                    return [
+                        'id' => $item->id,
+                        'order_id' => $item->order_id,
+                        'product_id' => $item->product_id,
+                        'product_variant_id' => $item->product_variant_id,
+                        'quantity' => (int) $item->quantity,
+                        'unit_price' => (float) $item->unit_price,
+                        'discount_price' => $item->discount_price ? (float) $item->discount_price : null,
+                        'total_price' => (float) $item->total_price,
+                        'product_name' => $item->product_name,
+                        'product_image' => $item->product_image
+                            ? asset('storage/' . $item->product_image)
+                            : null,
+                        'product_sku' => $item->product_sku,
+                        'product_barcode' => $item->product_barcode,
+                        'variant_name' => $item->variant_name,
+                        'variant_color' => $item->variant_color,
+                        'variant_size' => $item->variant_size,
+                        'item_status' => $item->item_status,
+                        'is_returned' => (bool) $item->is_returned,
+                        'is_refunded' => (bool) $item->is_refunded,
+                    ];
+                })->values()->toArray(),
+
+                // ============================================
+                // PAIEMENTS
+                // ============================================
+                'payments' => $order->payments->map(function ($payment) {
+                    return [
+                        'id' => $payment->id,
+                        'payment_number' => $payment->payment_number,
+                        'amount' => (float) $payment->amount,
+                        'method' => $payment->method,
+                        'status' => $payment->status,
+                        'paid_at' => $payment->paid_at?->toIso8601String(),
+                    ];
+                })->values()->toArray(),
+
+                // ============================================
+                // HISTORIQUE DES STATUTS
+                // ============================================
+                'status_history' => $order->statusHistory->map(function ($history) {
+                    return [
+                        'id' => $history->id,
+                        'old_status' => $history->old_status,
+                        'new_status' => $history->new_status,
+                        'note' => $history->note,
+                        'created_at' => $history->created_at?->toIso8601String(),
+                    ];
+                })->values()->toArray(),
+
+                // ============================================
+                // SUIVI
+                // ============================================
+                'trackings' => $order->trackings->map(function ($tracking) {
+                    return [
+                        'id' => $tracking->id,
+                        'tracking_number' => $tracking->tracking_number,
+                        'carrier' => $tracking->carrier,
+                        'status' => $tracking->status,
+                        'current_location' => $tracking->current_location,
+                        'created_at' => $tracking->created_at?->toIso8601String(),
+                    ];
+                })->values()->toArray(),
+            ],
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la récupération de la commande',
+            'error' => $e->getMessage(),
+        ], 500);
     }
+}
 
     /**
      * Récupérer une commande par son numéro.
@@ -1101,7 +1263,6 @@ class AdminOrderController extends Controller
 public function invoice($id)
 {
     try {
-        // Charger la commande avec toutes ses relations
         $order = Order::with([
             'user.profile',
             'items.product',
@@ -1118,7 +1279,6 @@ public function invoice($id)
             ], 404);
         }
 
-        // Vérifier que dompdf est disponible
         if (!class_exists(\Barryvdh\DomPDF\Facade\Pdf::class)) {
             return response()->json([
                 'success' => false,
@@ -1126,7 +1286,6 @@ public function invoice($id)
             ], 500);
         }
 
-        // Préparer les données pour la vue
         $data = [
             'order' => $order,
             'user' => $order->user,
@@ -1138,16 +1297,13 @@ public function invoice($id)
             'invoice_number' => 'FAC-' . $order->order_number,
         ];
 
-        // Générer le PDF
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView(
             'invoices.order',
             $data
         )->setPaper('A4', 'portrait');
 
-        // Nom du fichier
         $filename = 'facture-' . $order->order_number . '.pdf';
 
-        // Retourner le PDF en téléchargement
         return $pdf->download($filename);
 
     } catch (\Exception $e) {

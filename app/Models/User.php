@@ -13,7 +13,7 @@ use App\Models\User\Role;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
 
     /**
      * Table associée au modèle
@@ -31,6 +31,9 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'is_active',        // ✅ AJOUTÉ (utilisé dans AdminUserController)
+        'email_verified_at', // ✅ AJOUTÉ (utilisé pour vérification email)
+        'last_login_at'
     ];
 
     /**
@@ -51,6 +54,7 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'last_login_at' => 'datetime',
     ];
 
     /**

@@ -33,7 +33,7 @@ class UsersSeeder extends Seeder
             ],
             [
                 'name' => 'Jean Kamga',
-                'email' => 'jean@example.com',
+                'email' => 'jean@example.comjean@example.com',
                 'password' => Hash::make('password123'),
                 'role' => $clientRole,
             ],

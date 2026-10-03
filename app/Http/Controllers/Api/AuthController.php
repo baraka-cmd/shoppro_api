@@ -113,6 +113,8 @@ class AuthController extends Controller
                 ],
             ], 401);
         }
+        // ✅ Mettre à jour la dernière connexion
+        $user->update(['last_login_at' => now()]);
 
         // Révoquer les anciens tokens si "remember_me" est false
         if (!$request->remember_me) {
