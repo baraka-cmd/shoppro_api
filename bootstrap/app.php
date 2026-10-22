@@ -15,11 +15,18 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // ============================================
+        // ALIAS DES MIDDLEWARES
+        // ============================================
         $middleware->alias([
-            'role' => \App\Http\Middleware\CheckRole::class,
+            'role'          => \App\Http\Middleware\CheckRole::class,
+            'seller.active' => \App\Http\Middleware\EnsureSellerIsActive::class,
+            'ownership'     => \App\Http\Middleware\EnsureOwnership::class,
         ]);
 
-        // API : renvoyer JSON 401 au lieu de rediriger vers /login
+        // ============================================
+        // REDIRECTION INVITÉS (API → JSON 401)
+        // ============================================
         $middleware->redirectGuestsTo(function (Request $request) {
             if ($request->is('api/*') || $request->expectsJson()) {
                 return null;
@@ -46,6 +53,28 @@ return Application::configure(basePath: dirname(__DIR__))
                     'message' => 'Erreur de validation.',
                     'errors' => $e->errors(),
                 ], 422);
+            }
+        });
+
+        // 403 JSON pour les AuthorizationException (Policies)
+        $exceptions->render(function (\Illuminate\Auth\Access\AuthorizationException $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->getMessage() ?: 'Accès refusé.',
+                    'code'    => 'FORBIDDEN',
+                ], 403);
+            }
+        });
+
+        // 404 JSON pour ModelNotFoundException
+        $exceptions->render(function (\Illuminate\Database\Eloquent\ModelNotFoundException $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ressource introuvable.',
+                    'code'    => 'NOT_FOUND',
+                ], 404);
             }
         });
 

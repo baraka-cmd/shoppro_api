@@ -309,7 +309,6 @@ Route::prefix('orders')->group(function () {
     Route::delete('/{id}', [AdminOrderController::class, 'destroy']);
 });
 
-    // ============ AVIS ============
     Route::prefix('reviews')->group(function () {
         Route::get('/', [AdminReviewController::class, 'index']);
         Route::get('/pending', [AdminReviewController::class, 'pending']);
@@ -321,8 +320,12 @@ Route::prefix('orders')->group(function () {
         Route::get('/stats/count', [AdminReviewController::class, 'statsCount']);
         Route::get('/stats/by-status', [AdminReviewController::class, 'statsByStatus']);
         Route::get('/stats/by-rating', [AdminReviewController::class, 'statsByRating']);
+        Route::get('/stats/by-product', [AdminReviewController::class, 'statsByProduct']); // 🆕
         Route::get('/stats/average-rating', [AdminReviewController::class, 'statsAverageRating']);
+
         Route::get('/{id}', [AdminReviewController::class, 'show']);
+        Route::delete('/{id}', [AdminReviewController::class, 'destroy']);
+
         Route::post('/{id}/approve', [AdminReviewController::class, 'approve']);
         Route::post('/{id}/reject', [AdminReviewController::class, 'reject']);
         Route::post('/{id}/mark-spam', [AdminReviewController::class, 'markAsSpam']);
@@ -333,10 +336,10 @@ Route::prefix('orders')->group(function () {
         Route::post('/{id}/recommend', [AdminReviewController::class, 'recommend']);
         Route::delete('/{id}/recommend', [AdminReviewController::class, 'unrecommend']);
         Route::post('/{id}/restore', [AdminReviewController::class, 'restore']);
+
         Route::post('/bulk-approve', [AdminReviewController::class, 'bulkApprove']);
         Route::post('/bulk-reject', [AdminReviewController::class, 'bulkReject']);
         Route::post('/bulk-delete', [AdminReviewController::class, 'bulkDelete']);
-        Route::delete('/{id}', [AdminReviewController::class, 'destroy']);
     });
 
     // ============ STOCKS ============
@@ -500,17 +503,166 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 });
 
+
+
+
+
+// ============================================
+// 🏪 PROFIL BOUTIQUE VENDEUR (KYC INDÉPENDANT)
+// ============================================
+// ⚠️ Ce groupe est séparé du reste du module seller pour
+//    permettre à un vendeur KYC pending/rejected de :
+//    - Voir son profil
+//    - Modifier son profil
+//    - Uploader logo/bannière
+//    - Soumettre son KYC
+//
+// Middlewares :
+//   - auth:sanctum       → authentification obligatoire
+//   - role:seller,admin  → rôle vendeur ou admin
+//   - PAS de seller.active → un vendeur pending doit pouvoir soumettre son KYC
+// ============================================
+Route::prefix('v1/seller/profile')
+    ->middleware(['auth:sanctum', 'role:seller,admin'])
+    ->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\Seller\SellerProfileController::class, 'show']);
+        Route::put('/', [\App\Http\Controllers\Api\Seller\SellerProfileController::class, 'update']);
+        Route::post('/logo', [\App\Http\Controllers\Api\Seller\SellerProfileController::class, 'uploadLogo']);
+        Route::post('/banner', [\App\Http\Controllers\Api\Seller\SellerProfileController::class, 'uploadBanner']);
+        Route::post('/submit-kyc', [\App\Http\Controllers\Api\Seller\SellerProfileController::class, 'submitKyc']);
+    });
+
+    
 // ============================================
 // 🏪 ROUTES VENDEUR (RÔLE VENDEUR OU ADMIN)
 // ============================================
-Route::prefix('v1/seller')->middleware(['auth:sanctum', 'role:seller,admin'])->group(function () {
-    
-    // ============ GESTION DES PRODUITS DU VENDEUR ============
-    Route::prefix('products')->group(function () {
-        Route::get('/', [ProductController::class, 'sellerProducts']);
-        Route::post('/', [ProductController::class, 'store']);
-        Route::put('/{id}', [ProductController::class, 'update']);
-        Route::delete('/{id}', [ProductController::class, 'destroy']);
+// Sécurité :
+//   1. auth:sanctum        → authentification
+//   2. role:seller,admin   → rôle obligatoire
+//   3. seller.active       → KYC vérifié + compte actif
+// ============================================
+Route::prefix('v1/seller')
+    ->middleware(['auth:sanctum', 'role:seller,admin', 'seller.active'])
+    ->group(function () {
+
+        // ============================================
+        // 📊 DASHBOARD VENDEUR
+        // ============================================
+        Route::prefix('dashboard')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\Seller\SellerDashboardController::class, 'index']);
+            Route::get('/sales-chart', [\App\Http\Controllers\Api\Seller\SellerDashboardController::class, 'salesChart']);
+            Route::get('/recent-orders', [\App\Http\Controllers\Api\Seller\SellerDashboardController::class, 'recentOrders']);
+            Route::get('/top-products', [\App\Http\Controllers\Api\Seller\SellerDashboardController::class, 'topProducts']);
+            Route::get('/alerts', [\App\Http\Controllers\Api\Seller\SellerDashboardController::class, 'alerts']);
+        });
+
+        // ============================================
+        // 📦 PRODUITS VENDEUR
+        // ============================================
+        Route::prefix('products')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'store']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'show'])
+                ->middleware('ownership:product');
+            Route::put('/{id}', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'update'])
+                ->middleware('ownership:product');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'destroy'])
+                ->middleware('ownership:product');
+            Route::post('/{id}/publish', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'publish'])
+                ->middleware('ownership:product');
+            Route::post('/{id}/unpublish', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'unpublish'])
+                ->middleware('ownership:product');
+            Route::post('/{id}/duplicate', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'duplicate'])
+                ->middleware('ownership:product');
+            Route::get('/{id}/preview', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'preview'])
+                ->middleware('ownership:product');
+            Route::post('/{id}/images', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'uploadImages'])
+                ->middleware('ownership:product');
+            Route::delete('/{id}/images/{imageId}', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'deleteImage'])
+                ->middleware('ownership:product');
+            Route::post('/dismiss-onboarding', [SellerProfileController::class, 'dismissOnboarding']);
+        });
+
+        // ============================================
+        // 🛒 COMMANDES VENDEUR
+        // ============================================
+        Route::prefix('orders')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\Seller\SellerOrderController::class, 'index']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\Seller\SellerOrderController::class, 'show'])
+                ->middleware('ownership:order');
+            Route::post('/{id}/accept', [\App\Http\Controllers\Api\Seller\SellerOrderController::class, 'accept'])
+                ->middleware('ownership:order');
+            Route::post('/{id}/prepare', [\App\Http\Controllers\Api\Seller\SellerOrderController::class, 'prepare'])
+                ->middleware('ownership:order');
+            Route::post('/{id}/ship', [\App\Http\Controllers\Api\Seller\SellerOrderController::class, 'ship'])
+                ->middleware('ownership:order');
+            Route::post('/{id}/items/{itemId}/cancel', [\App\Http\Controllers\Api\Seller\SellerOrderController::class, 'cancelItem'])
+                ->middleware('ownership:order');
+        });
+
+        // ============================================
+        // ⭐ AVIS VENDEUR
+        // ============================================
+        Route::prefix('reviews')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\Seller\SellerReviewController::class, 'index']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\Seller\SellerReviewController::class, 'show'])
+                ->middleware('ownership:review');
+            Route::post('/{id}/respond', [\App\Http\Controllers\Api\Seller\SellerReviewController::class, 'respond'])
+                ->middleware('ownership:review');
+            Route::put('/{id}/respond', [\App\Http\Controllers\Api\Seller\SellerReviewController::class, 'updateResponse'])
+                ->middleware('ownership:review');
+            Route::delete('/{id}/respond', [\App\Http\Controllers\Api\Seller\SellerReviewController::class, 'deleteResponse'])
+                ->middleware('ownership:review');
+        });
+
+        // ============================================
+        // 📦 STOCKS VENDEUR
+        // ============================================
+        Route::prefix('stocks')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\Seller\SellerStockController::class, 'index']);
+            Route::get('/low', [\App\Http\Controllers\Api\Seller\SellerStockController::class, 'lowStock']);
+            Route::get('/out', [\App\Http\Controllers\Api\Seller\SellerStockController::class, 'outOfStock']);
+            Route::get('/movements', [\App\Http\Controllers\Api\Seller\SellerStockController::class, 'movements']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\Seller\SellerStockController::class, 'show'])
+                ->middleware('ownership:stock');
+            Route::post('/{id}/adjust', [\App\Http\Controllers\Api\Seller\SellerStockController::class, 'adjust'])
+                ->middleware('ownership:stock');
+        });
+
+        // ============================================
+        // 📈 STATISTIQUES VENDEUR
+        // ============================================
+        Route::prefix('stats')->group(function () {
+            Route::get('/sales', [\App\Http\Controllers\Api\Seller\SellerStatsController::class, 'sales']);
+            Route::get('/products', [\App\Http\Controllers\Api\Seller\SellerStatsController::class, 'products']);
+            Route::get('/customers', [\App\Http\Controllers\Api\Seller\SellerStatsController::class, 'customers']);
+            Route::get('/export', [\App\Http\Controllers\Api\Seller\SellerStatsController::class, 'export']);
+        });
+
+        // ============================================
+        // 💰 PAYOUTS (VERSEMENTS)
+        // ============================================
+        Route::prefix('payouts')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\Seller\SellerPayoutController::class, 'index']);
+            Route::get('/balance', [\App\Http\Controllers\Api\Seller\SellerPayoutController::class, 'balance']);
+            Route::post('/request', [\App\Http\Controllers\Api\Seller\SellerPayoutController::class, 'request']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\Seller\SellerPayoutController::class, 'show'])
+                ->middleware('ownership:payout');
+            Route::post('/{id}/cancel', [\App\Http\Controllers\Api\Seller\SellerPayoutController::class, 'cancel'])
+                ->middleware('ownership:payout');
+        });
+
+        
+
+        // ============================================
+        // 🔔 NOTIFICATIONS VENDEUR
+        // ============================================
+        Route::prefix('notifications')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\Seller\SellerNotificationController::class, 'index']);
+            Route::get('/unread-count', [\App\Http\Controllers\Api\Seller\SellerNotificationController::class, 'unreadCount']);
+            Route::post('/mark-all-read', [\App\Http\Controllers\Api\Seller\SellerNotificationController::class, 'markAllAsRead']);
+            Route::post('/{id}/read', [\App\Http\Controllers\Api\Seller\SellerNotificationController::class, 'markAsRead'])
+                ->middleware('ownership:notification');
+        });
+
     });
-    
-});
