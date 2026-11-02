@@ -163,6 +163,27 @@ class SellerDashboardResource extends JsonResource
         $result = [];
 
         foreach ($orders as $order) {
+            // Le contrôleur du dashboard fournit déjà des résumés prêts à
+            // l'emploi (sans la collection brute des articles). Ne pas les
+            // re-filtrer comme des modèles Order : cela supprimait la liste.
+            if (is_array($order) && array_key_exists('items_count', $order)) {
+                $total = (float) ($order['total'] ?? 0);
+                $result[] = [
+                    'id'               => (int) ($order['id'] ?? 0),
+                    'order_number'     => (string) ($order['order_number'] ?? ''),
+                    'status'           => (string) ($order['status'] ?? 'pending'),
+                    'status_label'     => (string) ($order['status_label'] ?? 'En attente'),
+                    'payment_status'   => (string) ($order['payment_status'] ?? 'pending'),
+                    'customer_name'    => (string) ($order['customer_name'] ?? 'Client'),
+                    'items_count'      => (int) $order['items_count'],
+                    'total'            => $total,
+                    'total_formatted'  => $order['total_formatted'] ?? $this->formatPrice($total),
+                    'created_at'       => $order['created_at'] ?? null,
+                    'created_at_human' => $order['created_at_human'] ?? null,
+                ];
+                continue;
+            }
+
             $items = is_array($order) ? ($order['items'] ?? []) : $order->items;
             $sellerItems = [];
             $sellerTotal = 0;

@@ -562,23 +562,25 @@ Route::prefix('v1/seller')
         Route::prefix('products')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'index']);
             Route::post('/', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'store']);
-            Route::get('/{id}', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'show'])
+            Route::get('/{product}', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'show'])
                 ->middleware('ownership:product');
-            Route::put('/{id}', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'update'])
+            Route::put('/{product}', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'update'])
                 ->middleware('ownership:product');
-            Route::delete('/{id}', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'destroy'])
+            Route::delete('/{product}', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'destroy'])
                 ->middleware('ownership:product');
-            Route::post('/{id}/publish', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'publish'])
+            Route::post('/{product}/publish', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'publish'])
                 ->middleware('ownership:product');
-            Route::post('/{id}/unpublish', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'unpublish'])
+            Route::post('/{product}/unpublish', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'unpublish'])
                 ->middleware('ownership:product');
-            Route::post('/{id}/duplicate', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'duplicate'])
+            Route::post('/{product}/duplicate', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'duplicate'])
                 ->middleware('ownership:product');
-            Route::get('/{id}/preview', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'preview'])
+            Route::get('/{product}/preview', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'preview'])
                 ->middleware('ownership:product');
-            Route::post('/{id}/images', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'uploadImages'])
+            Route::post('/{product}/images', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'uploadImages'])
                 ->middleware('ownership:product');
-            Route::delete('/{id}/images/{imageId}', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'deleteImage'])
+            Route::delete('/{product}/images/{image}', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'deleteImage'])
+                ->middleware('ownership:product');
+            Route::post('/{product}/images/reorder', [\App\Http\Controllers\Api\Seller\SellerProductController::class, 'reorderImages'])
                 ->middleware('ownership:product');
             Route::post('/dismiss-onboarding', [SellerProfileController::class, 'dismissOnboarding']);
         });
@@ -588,15 +590,15 @@ Route::prefix('v1/seller')
         // ============================================
         Route::prefix('orders')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\Seller\SellerOrderController::class, 'index']);
-            Route::get('/{id}', [\App\Http\Controllers\Api\Seller\SellerOrderController::class, 'show'])
+            Route::get('/{order}', [\App\Http\Controllers\Api\Seller\SellerOrderController::class, 'show'])
                 ->middleware('ownership:order');
-            Route::post('/{id}/accept', [\App\Http\Controllers\Api\Seller\SellerOrderController::class, 'accept'])
+            Route::post('/{order}/accept', [\App\Http\Controllers\Api\Seller\SellerOrderController::class, 'accept'])
                 ->middleware('ownership:order');
-            Route::post('/{id}/prepare', [\App\Http\Controllers\Api\Seller\SellerOrderController::class, 'prepare'])
+            Route::post('/{order}/prepare', [\App\Http\Controllers\Api\Seller\SellerOrderController::class, 'prepare'])
                 ->middleware('ownership:order');
-            Route::post('/{id}/ship', [\App\Http\Controllers\Api\Seller\SellerOrderController::class, 'ship'])
+            Route::post('/{order}/ship', [\App\Http\Controllers\Api\Seller\SellerOrderController::class, 'ship'])
                 ->middleware('ownership:order');
-            Route::post('/{id}/items/{itemId}/cancel', [\App\Http\Controllers\Api\Seller\SellerOrderController::class, 'cancelItem'])
+            Route::post('/{order}/cancel', [\App\Http\Controllers\Api\Seller\SellerOrderController::class, 'cancel'])
                 ->middleware('ownership:order');
         });
 
@@ -662,6 +664,10 @@ Route::prefix('v1/seller')
             Route::get('/unread-count', [\App\Http\Controllers\Api\Seller\SellerNotificationController::class, 'unreadCount']);
             Route::post('/mark-all-read', [\App\Http\Controllers\Api\Seller\SellerNotificationController::class, 'markAllAsRead']);
             Route::post('/{id}/read', [\App\Http\Controllers\Api\Seller\SellerNotificationController::class, 'markAsRead'])
+                ->middleware('ownership:notification');
+            Route::post('/{id}/unread', [\App\Http\Controllers\Api\Seller\SellerNotificationController::class, 'markAsUnread'])
+                ->middleware('ownership:notification');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\Seller\SellerNotificationController::class, 'destroy'])
                 ->middleware('ownership:notification');
         });
 

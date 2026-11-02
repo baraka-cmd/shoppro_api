@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Api\Seller;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\File;
 
 /**

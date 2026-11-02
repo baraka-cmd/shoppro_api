@@ -9,6 +9,8 @@ use App\Models\Order\Order;
 use App\Models\Order\OrderItem;
 use App\Models\Review\Review;
 use App\Models\Seller\SellerProfile;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -24,7 +26,7 @@ use Throwable;
 class SellerDashboardController extends Controller
 {
     private const CACHE_TTL = 300;
-    private const CACHE_PREFIX = 'seller:dashboard';
+    private const CACHE_PREFIX = 'seller:dashboard:v4';
 
     public function index(Request $request): JsonResponse
     {
@@ -164,9 +166,11 @@ class SellerDashboardController extends Controller
         $startOfLastMonth = $now->copy()->subMonth()->startOfMonth();
         $endOfLastMonth = $now->copy()->subMonth()->endOfMonth();
 
-        $baseRevenueQuery = OrderItem::query()
-            ->where('seller_id', $sellerId)
-            ->whereIn('item_status', ['delivered', 'shipped']);
+        $baseRevenueQuery = $this->sellerOrderItemsQuery($sellerId)
+            ->where(function ($query) {
+                $query->whereIn('item_status', ['delivered', 'shipped'])
+                    ->orWhereHas('order', fn ($order) => $order->whereIn('status', ['delivered', 'shipped']));
+            });
 
         $totalRevenue = (clone $baseRevenueQuery)->sum('total_price');
 
@@ -185,18 +189,18 @@ class SellerDashboardController extends Controller
         $commissionRate = (float) ($profileData['commission_rate'] ?? 10);
         $totalCommission = $totalRevenue * ($commissionRate / 100);
 
-        $orderIds = OrderItem::where('seller_id', $sellerId)->pluck('order_id')->unique();
+        $orderIds = $this->sellerOrderItemsQuery($sellerId)->pluck('order_id')->unique();
         $totalOrders = $orderIds->count();
 
-        $thisMonthOrderIds = OrderItem::where('seller_id', $sellerId)
+        $thisMonthOrderIds = $this->sellerOrderItemsQuery($sellerId)
             ->whereHas('order', fn ($q) => $q->where('created_at', '>=', $startOfMonth))
             ->pluck('order_id')->unique();
 
-        $lastMonthOrderIds = OrderItem::where('seller_id', $sellerId)
+        $lastMonthOrderIds = $this->sellerOrderItemsQuery($sellerId)
             ->whereHas('order', fn ($q) => $q->whereBetween('created_at', [$startOfLastMonth, $endOfLastMonth]))
             ->pluck('order_id')->unique();
 
-        $statusCounts = OrderItem::where('seller_id', $sellerId)
+        $statusCounts = $this->sellerOrderItemsQuery($sellerId)
             ->selectRaw('seller_status, COUNT(*) as count')
             ->whereNotNull('seller_status')
             ->groupBy('seller_status')
@@ -317,8 +321,11 @@ class SellerDashboardController extends Controller
     private function fetchRecentOrdersArray(int $sellerId, int $limit = 5): array
     {
         $orders = Order::query()
-            ->whereHas('items', fn ($q) => $q->where('seller_id', $sellerId))
-            ->with(['user:id,name,email', 'items' => fn ($q) => $q->where('seller_id', $sellerId)])
+            ->whereHas('items', fn ($q) => $this->applySellerOwnership($q, $sellerId))
+            ->with([
+                'user:id,name,email',
+                'items' => fn ($q) => $this->applySellerOwnership($q, $sellerId),
+            ])
             ->latest('created_at')
             ->limit($limit)
             ->get();
@@ -371,15 +378,18 @@ class SellerDashboardController extends Controller
         $startDate = now()->subDays($period - 1)->startOfDay();
         $endDate   = now()->endOfDay();
 
-        $salesByDay = OrderItem::query()
-            ->where('seller_id', $sellerId)
-            ->whereIn('item_status', ['delivered', 'shipped'])
-            ->whereHas('order', fn ($q) => $q->whereBetween('created_at', [$startDate, $endDate]))
-            ->selectRaw('DATE(created_at) as date, SUM(total_price) as revenue, COUNT(*) as items')
-            ->groupBy('date')
-            ->orderBy('date')
+        $salesByDay = $this->sellerOrderItemsQuery($sellerId)
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->where(function ($query) {
+                $query->whereIn('order_items.item_status', ['delivered', 'shipped'])
+                    ->orWhereIn('orders.status', ['delivered', 'shipped']);
+            })
+            ->whereBetween('orders.created_at', [$startDate, $endDate])
+            ->selectRaw('DATE(orders.created_at) as sale_date, SUM(order_items.total_price) as revenue, SUM(order_items.quantity) as items')
+            ->groupByRaw('DATE(orders.created_at)')
+            ->orderBy('sale_date')
             ->get()
-            ->keyBy('date');
+            ->keyBy('sale_date');
 
         $chartData = [];
         $totalRevenue = 0;
@@ -433,6 +443,23 @@ class SellerDashboardController extends Controller
             return $sellerId;
         }
         return $user->id;
+    }
+
+    /**
+     * Inclut les anciennes lignes sans seller_id en résolvant le propriétaire
+     * depuis leur produit. Les nouvelles commandes gardent seller_id explicite.
+     */
+    private function sellerOrderItemsQuery(int $sellerId): Builder
+    {
+        return $this->applySellerOwnership(OrderItem::query(), $sellerId);
+    }
+
+    private function applySellerOwnership(Builder|Relation $query, int $sellerId): Builder|Relation
+    {
+        return $query->where(function (Builder $items) use ($sellerId) {
+            $items->where('order_items.seller_id', $sellerId)
+                ->orWhereHas('product', fn (Builder $product) => $product->where('seller_id', $sellerId));
+        });
     }
 
     private function validatePeriod($period): int

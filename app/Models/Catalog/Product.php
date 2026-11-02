@@ -38,6 +38,7 @@ class Product extends Model
         'category_id',
         'subcategory_id',
         'brand_id',
+        'seller_id',
         'main_image',
         'views_count',
         'sales_count',

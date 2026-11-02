@@ -238,6 +238,8 @@ class OrderController extends Controller
 
                 $itemsData[] = [
                     'product_id' => $product->id,
+                    'seller_id' => $product->seller_id,
+                    'seller_status' => $product->seller_id ? 'to_accept' : null,
                     'product_variant_id' => $variant?->id,
                     'quantity' => $item['quantity'],
                     'unit_price' => $unitPrice,

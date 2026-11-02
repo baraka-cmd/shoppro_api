@@ -4,6 +4,7 @@ namespace App\Http\Resources\Api\Seller;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Carbon;
 
 /**
  * Resource : SellerNotificationResource
@@ -50,12 +51,42 @@ class SellerNotificationResource extends JsonResource
     public function toArray(Request $request): array
     {
         $notification = $this->resource;
+        $attributes = $notification->getAttributes();
+        $isAppNotification = array_key_exists('body', $attributes);
+        $payload = $isAppNotification ? [] : ($notification->data ?? []);
+        $type = $isAppNotification
+            ? match ($notification->type) {
+                'order' => 'new_order',
+                'review' => 'new_review',
+                'stock_alert' => 'low_stock',
+                'payout' => 'payout_received',
+                'system' => $notification->target_type === 'payout' ? 'payout_received' : 'general',
+                default => (string) ($notification->type ?: 'general'),
+            }
+            : ($payload['type'] ?? $payload['event'] ?? 'general');
 
-        // Récupérer le payload (data de la notification)
-        $data = $notification->data ?? [];
+        if ($isAppNotification) {
+            $targetId = $notification->target_id;
+            $payload = match ($notification->target_type) {
+                'order' => ['order_id' => $targetId],
+                'review' => ['review_id' => $targetId],
+                'product' => ['product_id' => $targetId],
+                'payout' => ['payout_id' => $targetId],
+                default => [],
+            };
+        }
 
-        // Le type est stocké dans 'type' ou 'event' selon la notification
-        $type = $data['type'] ?? $data['event'] ?? 'general';
+        $readAt = $notification->read_at;
+        $createdAt = $notification->created_at;
+        $actionUrl = $isAppNotification
+            ? match ($notification->target_type) {
+                'order' => '/seller/orders/' . $notification->target_id,
+                'review' => '/seller/reviews/' . $notification->target_id,
+                'product' => '/seller/stocks?product_id=' . $notification->target_id,
+                'payout' => '/seller/payouts/' . $notification->target_id,
+                default => $this->getDefaultActionUrl($type),
+            }
+            : ($payload['action_url'] ?? $this->getDefaultActionUrl($type));
 
         return [
             // ============================================
@@ -70,31 +101,47 @@ class SellerNotificationResource extends JsonResource
             'type_label' => $this->getTypeLabel($type),
             'icon'       => $this->getIcon($type),
             'color'      => $this->getColor($type),
-            'title'      => $data['title'] ?? $this->getDefaultTitle($type),
-            'message'    => $data['message'] ?? '',
+            'title'      => $isAppNotification
+                ? ($notification->title ?: $this->getDefaultTitle($type))
+                : ($payload['title'] ?? $this->getDefaultTitle($type)),
+            'message'    => $isAppNotification
+                ? ($notification->body ?? '')
+                : ($payload['message'] ?? $payload['body'] ?? ''),
 
             // ============================================
             // ÉTAT DE LECTURE
             // ============================================
-            'is_read'      => $notification->read_at !== null,
-            'read_at'      => $notification->read_at?->toIso8601String(),
+            'is_read'      => $isAppNotification ? (bool) $notification->is_read : $readAt !== null,
+            'read_at'      => $this->dateAsIso($readAt),
 
             // ============================================
             // ACTION
             // ============================================
-            'action_url' => $data['action_url'] ?? $this->getDefaultActionUrl($type),
+            'action_url' => $actionUrl,
 
             // ============================================
             // PAYLOAD SPÉCIFIQUE (selon le type)
             // ============================================
-            'data' => $this->buildSafeData($type, $data),
+            'data' => $isAppNotification ? $payload : $this->buildSafeData($type, $payload),
 
             // ============================================
             // HORODATAGE
             // ============================================
-            'created_at'       => $notification->created_at?->toIso8601String(),
-            'created_at_human' => $notification->created_at?->diffForHumans(),
+            'created_at'       => $this->dateAsIso($createdAt),
+            'created_at_human' => $this->dateHuman($createdAt),
         ];
+    }
+
+    private function dateAsIso(mixed $value): ?string
+    {
+        if ($value === null || $value === '') return null;
+        return ($value instanceof Carbon ? $value : Carbon::parse($value))->toIso8601String();
+    }
+
+    private function dateHuman(mixed $value): ?string
+    {
+        if ($value === null || $value === '') return null;
+        return ($value instanceof Carbon ? $value : Carbon::parse($value))->diffForHumans();
     }
 
     // ============================================

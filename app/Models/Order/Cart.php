@@ -5,6 +5,7 @@ namespace App\Models\Order;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\User;
+use App\Models\Catalog\Product;
 
 class Cart extends Model
 {
@@ -262,8 +263,12 @@ class Cart extends Model
         ]);
 
         foreach ($this->items as $cartItem) {
+            $sellerId = Product::whereKey($cartItem->product_id)->value('seller_id');
+
             $order->items()->create([
                 'product_id' => $cartItem->product_id,
+                'seller_id' => $sellerId,
+                'seller_status' => $sellerId ? 'to_accept' : null,
                 'product_variant_id' => $cartItem->product_variant_id,
                 'quantity' => $cartItem->quantity,
                 'unit_price' => $cartItem->unit_price,

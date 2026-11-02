@@ -4,286 +4,148 @@ namespace App\Http\Controllers\Api\Seller;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\Seller\SellerNotificationResource;
+use App\Models\Support\Notification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
-/**
- * Controller : SellerNotificationController
- *
- * Gère les notifications du vendeur connecté.
- *
- * Utilise la table `notifications` de Laravel (canal database).
- *
- * ⚠️ RÈGLES DE SÉCURITÉ CRITIQUES :
- *   - Scope strict : notifiable_id = auth()->id() ET notifiable_type = User
- *   - Aucune notification d'un autre utilisateur n'est exposée
- *   - Toutes les opérations (read, readAll) sont filtrées par user_id
- *
- * Actions :
- *   - index()       : Liste paginée avec filtres (all, unread)
- *   - read()        : Marquer une notification comme lue
- *   - readAll()     : Marquer toutes les notifications comme lues
- *   - unreadCount() : Compteur de notifications non lues (badge)
- *
- * @package App\Http\Controllers\Api\Seller
- */
 class SellerNotificationController extends Controller
 {
-    // ============================================
-    // INDEX — LISTE DES NOTIFICATIONS
-    // ============================================
-
-    /**
-     * GET /api/v1/seller/notifications
-     *
-     * Liste paginée des notifications du vendeur.
-     *
-     * Query params :
-     *   - filter   : all | unread | read
-     *   - type     : new_order | new_review | low_stock | payout_received | kyc_validated
-     *   - per_page : 20 par défaut, max 50
-     */
+    /** List notifications owned by the authenticated seller. */
     public function index(Request $request): JsonResponse
     {
         try {
-            $user = $request->user();
+            $userId = $request->user()->id;
+            $base = Notification::query()->where('user_id', $userId);
+            $query = clone $base;
 
-            // ============================================
-            // REQUÊTE DE BASE (scope strict)
-            // ============================================
-            $query = $user->notifications()->getQuery();
+            match ($request->input('filter', 'all')) {
+                'unread' => $query->where('is_read', false),
+                'read' => $query->where('is_read', true),
+                default => null,
+            };
 
-            // ============================================
-            // FILTRE : Lecture
-            // ============================================
-            $filter = $request->input('filter', 'all');
-            if ($filter === 'unread') {
-                $query->whereNull('read_at');
-            } elseif ($filter === 'read') {
-                $query->whereNotNull('read_at');
-            }
-
-            // ============================================
-            // FILTRE : Type (via JSON path)
-            // ============================================
             if ($request->filled('type')) {
-                $type = $request->input('type');
-                $query->where(function ($q) use ($type) {
-                    $q->where('data->type', $type)
-                      ->orWhere('data->event', $type);
-                });
+                $requestedType = $request->string('type')->toString();
+                $storedTypes = match ($requestedType) {
+                    'new_order', 'order_created', 'order_status_changed' => ['order'],
+                    'new_review', 'review_created' => ['review'],
+                    'low_stock', 'out_of_stock' => ['stock_alert'],
+                    'payout_received', 'payout_processed', 'payout_completed' => ['payout'],
+                    'general' => ['system'],
+                    default => [$requestedType],
+                };
+                $query->whereIn('type', $storedTypes);
             }
 
-            // ============================================
-            // TRI & PAGINATION
-            // ============================================
-            $perPage = min((int) $request->input('per_page', 20), 50);
+            $perPage = max(1, min((int) $request->input('per_page', 20), 50));
             $notifications = $query->latest()->paginate($perPage);
-
-            // ============================================
-            // COMPTEURS
-            // ============================================
-            $unreadCount = $user->unreadNotifications()->count();
-            $totalCount = $user->notifications()->count();
+            $total = (clone $base)->count();
+            $unread = (clone $base)->where('is_read', false)->count();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Notifications récupérées avec succès.',
-                'data'    => SellerNotificationResource::collection($notifications),
+                'data' => SellerNotificationResource::collection($notifications),
                 'pagination' => [
-                    'total'        => $notifications->total(),
-                    'count'        => $notifications->count(),
-                    'per_page'     => $notifications->perPage(),
+                    'total' => $notifications->total(),
+                    'count' => $notifications->count(),
+                    'per_page' => $notifications->perPage(),
                     'current_page' => $notifications->currentPage(),
-                    'last_page'    => $notifications->lastPage(),
-                    'has_more'     => $notifications->hasMorePages(),
+                    'last_page' => $notifications->lastPage(),
+                    'has_more' => $notifications->hasMorePages(),
                 ],
-                'counts' => [
-                    'total'  => $totalCount,
-                    'unread' => $unreadCount,
-                    'read'   => $totalCount - $unreadCount,
-                ],
-            ], Response::HTTP_OK);
+                'counts' => ['total' => $total, 'unread' => $unread, 'read' => $total - $unread],
+            ]);
         } catch (Throwable $e) {
             Log::error('SellerNotificationController::index', ['error' => $e->getMessage()]);
-            return $this->error(
-                'Impossible de récupérer les notifications : ' . $e->getMessage(),
-                Response::HTTP_INTERNAL_SERVER_ERROR
-            );
+            return $this->error('Impossible de récupérer les notifications.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
 
-    // ============================================
-    // READ — MARQUER UNE NOTIFICATION COMME LUE
-    // ============================================
-
-    /**
-     * POST /api/v1/seller/notifications/{id}/read
-     *
-     * Marque une notification spécifique comme lue.
-     *
-     * ⚠️ Sécurité : vérifie que la notification appartient bien au user.
-     */
-    public function read(Request $request, string $id): JsonResponse
+    /** Mark one seller-owned notification as read. */
+    public function markAsRead(Request $request, int $id): JsonResponse
     {
         try {
-            $user = $request->user();
+            $notification = $this->findForUser($request, $id);
+            if (!$notification) return $this->error('Notification introuvable.', Response::HTTP_NOT_FOUND);
 
-            // Récupérer UNIQUEMENT les notifications du user connecté
-            $notification = $user->notifications()
-                ->where('id', $id)
-                ->first();
-
-            if (!$notification) {
-                return $this->error(
-                    'Notification introuvable.',
-                    Response::HTTP_NOT_FOUND
-                );
-            }
-
-            // Marquer comme lue (si pas déjà lu)
-            if ($notification->read_at === null) {
-                $notification->markAsRead();
-            }
-
-            $unreadCount = $user->unreadNotifications()->count();
-
+            $notification->markAsRead();
             return response()->json([
                 'success' => true,
                 'message' => 'Notification marquée comme lue.',
-                'unread_count' => $unreadCount,
-            ], Response::HTTP_OK);
+                'unread_count' => Notification::where('user_id', $request->user()->id)->where('is_read', false)->count(),
+            ]);
         } catch (Throwable $e) {
-            Log::error('SellerNotificationController::read', ['error' => $e->getMessage()]);
-            return $this->error(
-                'Impossible de marquer la notification : ' . $e->getMessage(),
-                Response::HTTP_INTERNAL_SERVER_ERROR
-            );
+            Log::error('SellerNotificationController::markAsRead', ['error' => $e->getMessage()]);
+            return $this->error('Impossible de marquer la notification comme lue.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
 
-    // ============================================
-    // READ ALL — TOUT MARQUER COMME LU
-    // ============================================
-
-    /**
-     * POST /api/v1/seller/notifications/read-all
-     *
-     * Marque toutes les notifications du vendeur comme lues.
-     */
-    public function readAll(Request $request): JsonResponse
+    /** Mark one seller-owned notification as unread. */
+    public function markAsUnread(Request $request, int $id): JsonResponse
     {
         try {
-            $user = $request->user();
+            $notification = $this->findForUser($request, $id);
+            if (!$notification) return $this->error('Notification introuvable.', Response::HTTP_NOT_FOUND);
 
-            // Compter avant
-            $countBefore = $user->unreadNotifications()->count();
+            $notification->update(['is_read' => false, 'read_at' => null]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Notification marquée comme non lue.',
+                'unread_count' => Notification::where('user_id', $request->user()->id)->where('is_read', false)->count(),
+            ]);
+        } catch (Throwable $e) {
+            Log::error('SellerNotificationController::markAsUnread', ['error' => $e->getMessage()]);
+            return $this->error('Impossible de marquer la notification comme non lue.', Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
 
-            // Marquer tout comme lu
-            $user->unreadNotifications->markAsRead();
+    /** Mark all notifications belonging to this seller as read. */
+    public function markAllAsRead(Request $request): JsonResponse
+    {
+        try {
+            $count = Notification::where('user_id', $request->user()->id)->where('is_read', false)
+                ->update(['is_read' => true, 'read_at' => now(), 'updated_at' => now()]);
 
             return response()->json([
                 'success' => true,
-                'message' => $countBefore > 0
-                    ? "{$countBefore} notification(s) marquée(s) comme lue(s)."
-                    : 'Aucune notification à marquer.',
-                'marked_count' => $countBefore,
+                'message' => $count > 0 ? "$count notification(s) marquée(s) comme lue(s)." : 'Aucune notification à marquer.',
+                'marked_count' => $count,
                 'unread_count' => 0,
-            ], Response::HTTP_OK);
+            ]);
         } catch (Throwable $e) {
-            Log::error('SellerNotificationController::readAll', ['error' => $e->getMessage()]);
-            return $this->error(
-                'Impossible de marquer les notifications : ' . $e->getMessage(),
-                Response::HTTP_INTERNAL_SERVER_ERROR
-            );
+            Log::error('SellerNotificationController::markAllAsRead', ['error' => $e->getMessage()]);
+            return $this->error('Impossible de marquer les notifications comme lues.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
 
-    // ============================================
-    // UNREAD COUNT — COMPTEUR BADGE
-    // ============================================
-
-    /**
-     * GET /api/v1/seller/notifications/unread-count
-     *
-     * Retourne le nombre de notifications non lues.
-     * Utilisé pour le badge de l'AppBar.
-     */
+    /** Return the seller's unread count. */
     public function unreadCount(Request $request): JsonResponse
     {
-        try {
-            $user = $request->user();
-            $unreadCount = $user->unreadNotifications()->count();
-
-            return response()->json([
-                'success'      => true,
-                'unread_count' => $unreadCount,
-            ], Response::HTTP_OK);
-        } catch (Throwable $e) {
-            Log::error('SellerNotificationController::unreadCount', ['error' => $e->getMessage()]);
-            return $this->error(
-                'Impossible de compter les notifications : ' . $e->getMessage(),
-                Response::HTTP_INTERNAL_SERVER_ERROR
-            );
-        }
+        $count = Notification::where('user_id', $request->user()->id)->where('is_read', false)->count();
+        return response()->json(['success' => true, 'unread_count' => $count]);
     }
 
-    // ============================================
-    // DELETE — SUPPRIMER UNE NOTIFICATION (bonus)
-    // ============================================
-
-    /**
-     * DELETE /api/v1/seller/notifications/{id}
-     *
-     * Supprime une notification.
-     */
-    public function destroy(Request $request, string $id): JsonResponse
+    /** Soft-delete a seller-owned notification. */
+    public function destroy(Request $request, int $id): JsonResponse
     {
-        try {
-            $user = $request->user();
+        $notification = $this->findForUser($request, $id);
+        if (!$notification) return $this->error('Notification introuvable.', Response::HTTP_NOT_FOUND);
 
-            $notification = $user->notifications()
-                ->where('id', $id)
-                ->first();
-
-            if (!$notification) {
-                return $this->error(
-                    'Notification introuvable.',
-                    Response::HTTP_NOT_FOUND
-                );
-            }
-
-            $notification->delete();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Notification supprimée.',
-            ], Response::HTTP_OK);
-        } catch (Throwable $e) {
-            Log::error('SellerNotificationController::destroy', ['error' => $e->getMessage()]);
-            return $this->error(
-                'Impossible de supprimer la notification : ' . $e->getMessage(),
-                Response::HTTP_INTERNAL_SERVER_ERROR
-            );
-        }
+        $notification->delete();
+        return response()->json(['success' => true, 'message' => 'Notification supprimée.']);
     }
 
-    // ============================================
-    // HELPERS
-    // ============================================
-
-    /**
-     * Réponse erreur standardisée.
-     */
-    private function error(string $message, int $status = Response::HTTP_BAD_REQUEST): JsonResponse
+    private function findForUser(Request $request, int $id): ?Notification
     {
-        return response()->json([
-            'success' => false,
-            'message' => $message,
-        ], $status);
+        return Notification::where('user_id', $request->user()->id)->whereKey($id)->first();
+    }
+
+    private function error(string $message, int $status): JsonResponse
+    {
+        return response()->json(['success' => false, 'message' => $message], $status);
     }
 }
